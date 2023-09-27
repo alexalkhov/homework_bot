@@ -7,7 +7,6 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
@@ -55,9 +54,9 @@ def send_message(bot, message):
     """Функция отправляет сообщение."""
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+        logger.debug(f'Сообщение {message} в Telegram отправлено')
     except Exception:
         logger.error('Cбой при отправке сообщения в Telegram')
-    logger.debug(f'Сообщение {message} в Telegram отправлено')
 
 
 def get_api_answer(timestamp):
@@ -117,13 +116,15 @@ def main():
     while True:
         try:
             response = get_api_answer(timestamp)
-            homework_statuses = check_response(response)
-            homework = homework_statuses[0]
+            homework_status = check_response(response)
+            homework = homework_status[0]
             current_status = homework.get('status')
             if current_status != previous_status:
                 message = parse_status(homework)
                 send_message(bot, message)
                 previous_status = current_status
+            else:
+                logger.debug('Отсутствуют новые статусы домашней работы.')
             time.sleep(RETRY_PERIOD)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
