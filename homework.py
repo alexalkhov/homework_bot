@@ -43,10 +43,9 @@ logger.addHandler(handler)
 def check_tokens():
     """Функция проверяет введенные токены."""
     tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
-    for token in tokens:
-        if token is None:
-            logger.critical('Отсутствует переменная окружения')
-            raise SystemExit(1)
+    if not all(tokens):
+        logger.critical('Отсутствует одна или несколько переменных окружения.')
+        raise SystemExit(1)
 
 
 def send_message(bot, message):
@@ -79,22 +78,21 @@ def check_response(response):
     """Функция проверяет соответствие ответа API."""
     if not isinstance(response, dict):
         raise TypeError('Некорректный формат ответа API. Ожидается словарь.')
-    if 'homeworks' not in response:
+    if homeworks := response.get('homeworks'):
+        if not isinstance(homeworks, list):
+            raise TypeError(
+                'Данные домашних работ должны быть представлены в виде списка'
+            )
+    else:
         raise ValueError('Домашние работы не найдены')
-    if not isinstance(homework_statuses := response.get('homeworks'), list):
-        raise TypeError(
-            'Данные домашних работ должны быть представлены в виде списка'
-        )
-    if not homework_statuses:
-        logger.error('Отсутствуют ожидаемые ключи в ответе API')
-    return homework_statuses
+    return homeworks
 
 
 def parse_status(homework):
     """Функция получает статус домашней работы."""
     if (homework_status := homework.get('status')) not in HOMEWORK_VERDICTS:
         raise KeyError('Статус домашней работы не найден')
-    if not (homework_name := homework.get('homework_name')):
+    if (homework_name := homework.get('homework_name')) is None:
         raise KeyError('Имя домашней работы не найдено')
     verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -110,17 +108,17 @@ def main():
         try:
             response = get_api_answer(timestamp)
             homework_status = check_response(response)
-            if len(homework_status) > 0:
-                homework = homework_status[0]
-                current_status = homework.get('status')
-                if current_status == previous_status:
-                    logger.debug('Отсутствуют новые статусы домашней работы.')
-                    continue
-                message = parse_status(homework)
-                send_message(bot, message)
-                previous_status = current_status
-            else:
+            if not homework_status:
                 logger.debug('Список домашних заданий пуст.')
+                continue
+            homework = homework_status[0]
+            current_status = homework.get('status')
+            if current_status == previous_status:
+                logger.debug('Отсутствуют новые статусы домашней работы.')
+                continue
+            message = parse_status(homework)
+            send_message(bot, message)
+            previous_status = current_status
             timestamp = response.get('current_date', timestamp)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
